@@ -1,4 +1,4 @@
-cat > dfx.json <<'JSON'
+
 {
   "version": 1,
   "canisters": {
@@ -18,4 +18,3 @@ cat > dfx.json <<'JSON'
     }
   }
 }
-JSON
