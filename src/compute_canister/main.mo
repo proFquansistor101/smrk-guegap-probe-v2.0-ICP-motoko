@@ -1,172 +1,120 @@
-import Blob  "mo:base/Blob";
-import Float "mo:base/Float";
-import Text  "mo:base/Text";
-import Bool  "mo:base/Bool";
-import Array "mo:base/Array";
-import Nat8  "mo:base/Nat8";
-import Nat32 "mo:base/Nat32";
+import Blob    "mo:base/Blob";
+import Bool    "mo:base/Bool";
+import Nat     "mo:base/Nat";
+import Nat8    "mo:base/Nat8";
+import Nat32   "mo:base/Nat32";
+import Nat64   "mo:base/Nat64";
+import Text    "mo:base/Text";
+import Time    "mo:base/Time";
+import Int     "mo:base/Int";
 
-import T "types";
+persistent actor ComputeCanister {
 
-// ------------------------------------------------------------
-// Registry API (typed actor interface)
-// ------------------------------------------------------------
-module RegistryAPI {
-  public type RunId = Text;
+  type RunId = Text;
 
-  public type JobStatus = {
+  type JobStatus = {
     #queued;
     #running;
     #done;
     #failed;
   };
 
-  public type JobRecord = {
+  type JobRecord = {
     run_id          : RunId;
     created_at_ns   : Nat64;
     status          : JobStatus;
     input           : Blob;
-    input_sha256    : Blob;      // kept for compatibility (may be empty/placeholder in v2)
+    input_sha256    : Blob;
     output          : ?Blob;
-    output_sha256   : ?Blob;     // kept for compatibility
+    output_sha256   : ?Blob;
     commit_hash_hex : ?Text;
     error           : ?Text;
   };
 
-  public type Registry = actor {
-    get_job      : ({ run_id : RunId }) -> async (?JobRecord);
-    mark_running : ({ run_id : RunId }) -> async Bool;
-    set_result   : ({ run_id : RunId; output : Blob }) -> async Bool;
-    set_failed   : ({ run_id : RunId; error : Text }) -> async Bool;
+  type Registry = actor {
+    get_job      : shared query ({ run_id : RunId }) -> async ?JobRecord;
+    mark_running : shared ({ run_id : RunId }) -> async Bool;
+    set_result   : shared ({ run_id : RunId; output : Blob }) -> async Bool;
+    set_failed   : shared ({ run_id : RunId; error : Text }) -> async Bool;
   };
-};
 
-// ------------------------------------------------------------
-// Compute Canister
-// ------------------------------------------------------------
-actor ComputeCanister {
+  stable var registry_id_text : Text = "";
+  stable var initialized : Bool = false;
 
-  // Local dev alias by canister name
-  let registry : RegistryAPI.Registry = actor ("registry_canister");
+  func nowNs() : Nat64 {
+    let t : Int = Time.now();
+    if (t <= 0) { 0 } else { Nat64.fromNat(Int.abs(t)) };
+  };
 
-  // ----------------------------------------------------------
-  // Deterministic pseudohash (FNV-1a style) over Blob bytes
-  // (No SHA dependency; stable across replicas)
-// ----------------------------------------------------------
+  func reg() : Registry {
+    if (initialized == false or registry_id_text == "") { assert false };
+    actor (registry_id_text) : Registry
+  };
+
   func fnv1a32(input : Blob) : Nat32 {
     let bytes = Blob.toArray(input);
-    var h : Nat32 = 2166136261; // offset basis
+    var h : Nat32 = 2166136261;
     var i : Nat = 0;
-
     while (i < bytes.size()) {
-      h := Nat32.xor(h, Nat32.fromNat(Nat8.toNat(bytes[i])));
-      h := Nat32.mul(h, 16777619);
+      h := h ^ Nat32.fromNat(Nat8.toNat(bytes[i]));
+      h := h * 16777619;
       i += 1;
     };
     h
   };
 
-  func byte0(h : Nat32) : Nat8 {
-    Nat8.fromNat(Nat32.toNat(Nat32.and(h, 0xff)))
-  };
+  func byte0(h : Nat32) : Nat8 { Nat8.fromNat(Nat32.toNat(h & 0xff)) };
+  func byte1(h : Nat32) : Nat8 { Nat8.fromNat(Nat32.toNat((h >> 8) & 0xff)) };
+  func byte2(h : Nat32) : Nat8 { Nat8.fromNat(Nat32.toNat((h >> 16) & 0xff)) };
+  func byte3(h : Nat32) : Nat8 { Nat8.fromNat(Nat32.toNat((h >> 24) & 0xff)) };
 
-  func byte1(h : Nat32) : Nat8 {
-    Nat8.fromNat(Nat32.toNat(Nat32.and(Nat32.shiftRight(h, 8), 0xff)))
-  };
+  func makeOutput(input : Blob, runId : Text, n : Nat) : Blob {
+    let h = fnv1a32(input);
 
-  // ----------------------------------------------------------
-  // Deterministic screening stub derived from fnv1a32(input)
-  // Outputs a JSON blob (UTF-8).
-  // ----------------------------------------------------------
-  func screening_stub(input : Blob, N : Nat) : Blob {
-    let h  = fnv1a32(input);
-    let b0 = byte0(h);
-    let b1 = byte1(h);
-
-    let r_mean =
-      (Float.fromInt(Nat8.toNat(b0)) / 255.0) * 0.2 + 0.5; // ~[0.5, 0.7]
-
-    let delta1 =
-      (Float.fromInt(Nat8.toNat(b1)) / 255.0) * 0.05;      // ~[0.0, 0.05]
-
-    let pass =
-      if (r_mean > 0.58 and delta1 > 0.005) { "pass" } else { "fail" };
-
-    // canonical-ish: fixed key order, no whitespace
     let json =
       "{"
-      # "\"probe_version\":\"smrk-guegap-icp-v2\","
-      # "\"N\":" # Nat.toText(N) # ","
-      # "\"bulk_r\":{\"r_mean\":" # Float.toText(r_mean) # ",\"count\":100},"
-      # "\"gap\":{\"delta1\":" # Float.toText(delta1) # "},"
-      # "\"H1_H2_proxy\":\"" # pass # "\""
+      # "\"run_id\":\"" # runId # "\","
+      # "\"n\":" # Nat.toText(n) # ","
+      # "\"fnv1a32\":" # Nat.toText(Nat32.toNat(h)) # ","
+      # "\"b0\":" # Nat.toText(Nat8.toNat(byte0(h))) # ","
+      # "\"b1\":" # Nat.toText(Nat8.toNat(byte1(h))) # ","
+      # "\"b2\":" # Nat.toText(Nat8.toNat(byte2(h))) # ","
+      # "\"b3\":" # Nat.toText(Nat8.toNat(byte3(h))) # ","
+      # "\"ts_ns\":" # Nat64.toText(nowNs())
       # "}";
 
     Text.encodeUtf8(json)
   };
 
-  // ----------------------------------------------------------
-  // Registry-driven run: marks running, fetches job input,
-  // computes output, commits to registry.
-  // ----------------------------------------------------------
-  public shared func run_screening(req : { run_id : T.RunId })
-    : async { ok : Bool; message : Text }
-  {
-    let okRun = await registry.mark_running({ run_id = req.run_id });
+  public func init(registry_canister_id : Text) : async Bool {
+    registry_id_text := registry_canister_id;
+    initialized := true;
+    true
+  };
 
-    if (not okRun) {
-      return { ok = false; message = "Job not runnable (missing/done/failed)." };
-    };
+  public func run_screening(req : { run_id : Text; n : Nat }) : async Bool {
+    let r = reg();
 
-    let jobOpt = await registry.get_job({ run_id = req.run_id });
-
+    let jobOpt = await r.get_job({ run_id = req.run_id });
     switch (jobOpt) {
       case null {
-        ignore await registry.set_failed({
-          run_id = req.run_id;
-          error  = "Job missing after mark_running."
-        });
-        { ok = false; message = "Job missing." }
+        ignore await r.set_failed({ run_id = req.run_id; error = "Job not found" });
+        false
       };
-
       case (?job) {
-        // v2 stub uses N=256 fixed
-        let out = screening_stub(job.input, 256);
+        let okRun = await r.mark_running({ run_id = req.run_id });
+        if (okRun == false) { return false };
 
-        let okSet = await registry.set_result({
-          run_id = req.run_id;
-          output = out
-        });
+        let out = makeOutput(job.input, job.run_id, req.n);
 
-        if (okSet) {
-          { ok = true; message = "Screening complete (stub) and committed." }
-        } else {
-          ignore await registry.set_failed({
-            run_id = req.run_id;
-            error  = "Failed to set result."
-          });
-          { ok = false; message = "Failed to commit output." }
-        }
+        let okSet = await r.set_result({ run_id = req.run_id; output = out });
+        if (okSet == false) {
+          ignore await r.set_failed({ run_id = req.run_id; error = "Failed to set result" });
+          return false
+        };
+
+        true
       }
     }
-  };
-
-  // ----------------------------------------------------------
-  // Convenience alias (some callers prefer run_probe semantics)
-  // ----------------------------------------------------------
-  public shared func run_probe(req : { run_id : T.RunId })
-    : async { ok : Bool; message : Text }
-  {
-    await run_screening(req)
-  };
-
-  // ----------------------------------------------------------
-  // Quick local test endpoint (NO registry):
-  // lets you do: dfx canister call compute_canister run_probe_quick '(256)'
-  // ----------------------------------------------------------
-  public shared func run_probe_quick(N : Nat) : async Blob {
-    // deterministic input derived only from N
-    let input = Text.encodeUtf8("probe_input_N=" # Nat.toText(N));
-    screening_stub(input, N)
   };
 }
