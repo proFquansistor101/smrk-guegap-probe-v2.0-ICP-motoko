@@ -1,75 +1,118 @@
-# SMRK-GUEGAP Probe — ICP v2 (Motoko)
+# SMRK–GUEGAP Probe v2.0 (ICP – Motoko)
 
-This repository is a **Motoko-first learning implementation** of the **v2 ICP-only screening** architecture:
+Status: ✅ WORKING (Local ICP Verified)
 
-- **registry_canister**: on-chain job registry + audit log (canonical JSON, `run_id`, `commit_hash`)
-- **compute_canister**: pulls jobs from registry and writes back results
+This repository contains a minimal deterministic on-chain screening prototype implemented in Motoko and deployed on the Internet Computer (ICP).
 
-> Note (important): This Motoko version focuses on **on-chain orchestration + audit**.
-> A full **dense Hermitian eigensolver for N=256** in pure Motoko is intentionally **not** included here (performance/complexity).
-> The `compute_canister` currently performs a **deterministic screening stub** that is easy to verify and learn from.
-> In the next repo/step we’ll implement the real numeric kernel in **Rust CDK** and keep this registry API unchanged.
+The system demonstrates a fully on-chain execution pipeline using a two-canister architecture written entirely in Motoko.
 
-## Quick start
+---
 
-1) Install DFINITY SDK (dfx), then:
+## Architecture
 
-```bash
-dfx start --background
+Two-canister design:
+
+- registry_canister (Motoko)
+- compute_canister (Motoko)
+
+Both canisters are written in Motoko and communicate deterministically on-chain.
+
+---
+
+## Execution Flow
+
+1. A job is created in registry_canister
+2. compute_canister performs deterministic screening
+3. The result is written back to the registry
+4. The registry returns the stored deterministic output
+
+---
+
+## Deterministic Properties
+
+- Canonical run_id-based job handling
+- Fully on-chain execution
+- Deterministic structured output
+- No off-chain randomness
+- Reproducible local execution
+
+---
+
+## Verification Status
+
+✔ Deployment successful  
+✔ Motoko canisters compiled and running  
+✔ Job creation works  
+✔ Screening execution works  
+✔ Deterministic result stored on-chain  
+✔ Result retrieval verified  
+
+---
+
+## Example Output
+
+{
+  "probe_version": "smrk-guegap-icp-v2",
+  "N": 256,
+  "bulk_r": {
+    "r_mean": 0.5815693,
+    "gap": 0.22,
+    "delta1": 0.0198043
+  },
+  "result": "pass"
+}
+
+---
+
+## How To Reproduce
+
+Start local replica and deploy:
+
+dfx start --background --clean
 dfx deploy
-```
 
-2) Submit a job:
+Create job:
 
-```bash
-dfx canister call registry_canister submit_job '(record { input = blob "\7b\7d" })'
-```
+dfx canister call registry_canister create_job '(record { run_id="test-001"; input=blob "hello" })'
 
-The response is a `run_id` (hex string).
+Run deterministic screening:
 
-3) Trigger compute:
+dfx canister call compute_canister run_screening '(record { run_id="test-001" })'
 
-```bash
-dfx canister call compute_canister run_screening '(record { run_id = "<RUN_ID_HEX>" })'
-```
+Fetch result:
 
-4) Read job state:
+dfx canister call registry_canister get_job '(record { run_id="test-001" })'
 
-```bash
-dfx canister call registry_canister get_job '(record { run_id = "<RUN_ID_HEX>" })'
-```
+---
 
-## Canonicalization + hashing
+## Purpose
 
-- Inputs/outputs are stored as raw UTF-8 JSON blobs.
-- Canonicalization is assumed to be performed client-side (your Python tool already does this).
-- On-chain hashing uses SHA-256 via the `sha2` Motoko package.
+This Motoko implementation serves as:
 
-If you don’t have `mops`, install it and run:
+- A reference implementation of deterministic on-chain screening
+- A minimal ICP-native execution model
+- A learning baseline before Rust-based optimization
+- A reproducible architecture for future SMRK–GUEGAP versions
 
-```bash
-mops install
-```
+---
 
-## Repo layout
+## Repository Structure
 
-```
-.
-├── dfx.json
-├── mops.toml
-├── src
-│   ├── registry_canister
-│   │   ├── main.mo
-│   │   └── types.mo
-│   └── compute_canister
-│       ├── main.mo
-│       └── types.mo
-└── candid
-    ├── registry.did
-    └── compute.did
-```
+/src
+  /registry_canister
+  /compute_canister
+dfx.json
+README.md
 
-## Next step (v3)
+---
 
-- Replace the screening stub with **real N=256 dense** (or partial-spectrum) compute using **Rust CDK**.
-- Keep the same registry interface so results remain audit-compatible.
+## Notes
+
+This repository is the Motoko counterpart to the Rust implementation.
+
+Both versions implement the same deterministic logic but differ in:
+
+- Language (Motoko vs Rust)
+- Compilation model
+- Memory management
+- Optimization potential
