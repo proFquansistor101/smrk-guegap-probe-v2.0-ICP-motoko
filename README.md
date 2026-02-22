@@ -116,3 +116,31 @@ Both versions implement the same deterministic logic but differ in:
 - Compilation model
 - Memory management
 - Optimization potential
+
+
+## Local deployment (dfx)
+
+### Canister IDs (local)
+- compute_canister: `lqy7q-dh777-77777-aaaaq-cai`
+- registry_canister: `lz3um-vp777-77777-aaaba-cai`
+
+### Candid UI (local replica)
+- compute_canister: http://127.0.0.1:4943/?canisterId=l62sy-yx777-77777-aaabq-cai&id=lqy7q-dh777-77777-aaaaq-cai
+- registry_canister: http://127.0.0.1:4943/?canisterId=l62sy-yx777-77777-aaabq-cai&id=lz3um-vp777-77777-aaaba-cai
+
+### Quick start
+```bash
+dfx start --background
+dfx deploy
+
+# init compute -> registry binding
+dfx canister call compute_canister init '("lz3um-vp777-77777-aaaba-cai")'
+
+# create a job
+dfx canister call registry_canister create_job '(record { run_id="run-1"; input=blob "hello"; commit_hash_hex=null })'
+
+# run screening
+dfx canister call compute_canister run_screening '(record { run_id="run-1"; n=256 })'
+
+# read back job
+dfx canister call registry_canister get_job '(record { run_id="run-1" })'
