@@ -1,0 +1,21 @@
+cat > dfx.json <<'JSON'
+{
+  "version": 1,
+  "canisters": {
+    "registry_canister": {
+      "type": "motoko",
+      "main": "src/registry_canister/main.mo"
+    },
+    "compute_canister": {
+      "type": "motoko",
+      "main": "src/compute_canister/main.mo"
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:4943",
+      "type": "ephemeral"
+    }
+  }
+}
+JSON

@@ -1,0 +1,6 @@
+\
+type RunId = text;
+
+service : {
+  run_screening: (record { run_id: RunId }) -> (record { ok: bool; message: text });
+}

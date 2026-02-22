@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+title: "SMRK-GUEGAP Probe — ICP v2 (Motoko)"
+message: "If you use this software or its results, please cite it."
+type: software
+authors:
+    proFQuansistor
+    affiliation: "101research.group"
+version: 0.2.0
+date-released: 2026-02-21
+license: Apache-2.0
+repository-code: "https://github.com/101researchgroup/smrk-guegap-probe-v2-ICP-motoko"
+abstract: >
+  Motoko-first learning implementation of the ICP-only screening architecture:
+  on-chain job registry with canonical JSON hashing (run_id/commit_hash) and a
+  compute canister that executes deterministic screening tasks and stores results.
+keywords:
+  - internet computer
+  - motoko
+  - auditability
+  - sha256
+  - spectral probe

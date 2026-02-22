@@ -1,0 +1,25 @@
+\
+type RunId = text;
+
+type JobStatus = variant { queued; running; done; failed };
+
+type JobRecord = record {
+  run_id: RunId;
+  created_at_ns: nat64;
+  status: JobStatus;
+  input: blob;
+  input_sha256: blob;
+  output: opt blob;
+  output_sha256: opt blob;
+  commit_hash_hex: opt text;
+  error: opt text;
+};
+
+service : {
+  submit_job: (record { input: blob }) -> (record { run_id: RunId; run_id_hex: text });
+  get_job: (record { run_id: RunId }) -> (opt JobRecord);
+  list_jobs: (record { limit: nat32; cursor: nat32 }) -> (vec RunId);
+  mark_running: (record { run_id: RunId }) -> (bool);
+  set_result: (record { run_id: RunId; output: blob }) -> (bool);
+  set_failed: (record { run_id: RunId; error: text }) -> (bool);
+}

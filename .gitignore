@@ -1,0 +1,7 @@
+# DFX
+.dfx/
+canister_ids.json
+
+# OS
+.DS_Store
+Thumbs.db
